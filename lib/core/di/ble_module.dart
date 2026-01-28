@@ -4,5 +4,5 @@ import 'package:injectable/injectable.dart';
 @module
 abstract class BleModule {
   @lazySingleton
-  BleService get bleService => BleService();
+  BleService get bleService => BleService()..init();
 }
