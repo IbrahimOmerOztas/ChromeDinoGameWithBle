@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:dinogame/core/errors/exception.dart';
 import 'package:dinogame/domain/entites/ble_device_entity.dart';
+import 'package:dinogame/domain/entites/ble_sample_entity.dart';
 import 'package:dinogame/domain/repositories/ble_repositories.dart';
 import 'package:dinogame/presentation/bluetooth/ble_state.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
@@ -33,7 +34,9 @@ class BluetoothController extends GetxController {
   final errorMessage = Rxn<String>();
 
   /// Sensör verisi
-  final sensorData = Rxn<String>();
+  final sensorData = Rxn<BleSampleEntity>();
+
+  final isCalibrating = false.obs;
 
   /// Sensör verisini dinliyor mu
   final isListeningSensor = false.obs;
@@ -50,7 +53,7 @@ class BluetoothController extends GetxController {
 
   StreamSubscription<List<BleDeviceEntity>>? _scanSub;
   StreamSubscription<BluetoothConnectionState>? _connSub;
-  StreamSubscription<String>? _sensorSub;
+  StreamSubscription<BleSampleEntity>? _sensorSub;
 
   // ============== Computed Getters ==============
 
@@ -263,6 +266,37 @@ class BluetoothController extends GetxController {
     errorMessage.value = null;
   }
 
+  //----------------calibration--------------------
+  Future<void> calibrate() async {
+    if (!isConnected) {
+      _setError("Kalibrasyon için önce bir cihaza bağlanmalısınız");
+      return;
+    }
+
+    try {
+      _clearError();
+      isCalibrating.value = true;
+
+      // Repository içindeki 3 saniyelik toplama ve hesaplama sürecini başlatır.
+      // Bu metod bittiğinde repository musluğu (notify) otomatik kapatacaktır.
+      await _bleRepositories.startCalibration(
+        serviceUuid: serviceUuid,
+        characteristicUuid: charUuid,
+      );
+
+      Get.snackbar(
+        "Başarılı",
+        "Cihaz başarıyla kalibre edildi. Artık oyuna başlayabilirsiniz!",
+        snackPosition: SnackPosition.BOTTOM,
+      );
+    } on BleException catch (e) {
+      _setError("Kalibrasyon hatası: ${e.message}");
+    } catch (e) {
+      _setError("Beklenmedik bir kalibrasyon hatası oluştu");
+    } finally {
+      isCalibrating.value = false;
+    }
+  }
   // ============== Lifecycle ==============
 
   @override

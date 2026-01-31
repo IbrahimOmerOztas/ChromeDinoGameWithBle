@@ -199,6 +199,7 @@ class BleService {
   }
 
   //--------------------Calibration----------------
+  Future<void> getCalibrationValues() async {}
 
   Future<void> disposeElements() async {
     connSub?.cancel();

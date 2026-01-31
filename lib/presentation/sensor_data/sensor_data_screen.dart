@@ -1,3 +1,4 @@
+import 'package:dinogame/domain/entites/ble_sample_entity.dart';
 import 'package:dinogame/presentation/bluetooth/bluetooth_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -16,13 +17,12 @@ class SensorDataScreen extends StatelessWidget {
         child: Column(
           children: [
             // Bağlı Cihaz Bilgisi
-            //_buildDeviceInfo(),
             buildDeviceInfo(),
 
             // Ana Veri Gösterimi
             Expanded(child: _buildSensorDisplay()),
 
-            // Kontrol Butonları
+            // Kontrol Butonları (Kalibrasyon Dahil)
             _buildControlButtons(),
           ],
         ),
@@ -45,7 +45,9 @@ class SensorDataScreen extends StatelessWidget {
       ),
       actions: [
         Obx(() {
-          if (controller.isListeningSensor.value) {
+          // Hem dinleme hem kalibrasyon sırasında yükleme ikonu göster
+          if (controller.isListeningSensor.value ||
+              controller.isCalibrating.value) {
             return Container(
               margin: const EdgeInsets.only(right: 16),
               child: const Center(
@@ -54,7 +56,7 @@ class SensorDataScreen extends StatelessWidget {
                   height: 20,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation(Colors.greenAccent),
+                    valueColor: AlwaysStoppedAnimation(Colors.yellow),
                   ),
                 ),
               ),
@@ -66,101 +68,18 @@ class SensorDataScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildDeviceInfo() {
+  Widget buildDeviceInfo() {
     return Obx(() {
-      final device = controller.connectedDevice.value;
-
+      final isCalibrating = controller.isCalibrating.value;
       return Container(
         margin: const EdgeInsets.all(16),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: Colors.grey[850],
-          borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: controller.isConnected ? Colors.green : Colors.red,
-            width: 2,
-          ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: controller.isConnected
-                    ? Colors.green.withOpacity(0.2)
-                    : Colors.red.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(
-                controller.isConnected
-                    ? Icons.bluetooth_connected
-                    : Icons.bluetooth_disabled,
-                color: controller.isConnected ? Colors.green : Colors.red,
-                size: 24,
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    device?.name ?? 'Bağlı Değil',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    controller.isConnected ? 'Bağlı' : 'Bağlantı Yok',
-                    style: TextStyle(
-                      color: controller.isConnected
-                          ? Colors.green[300]
-                          : Colors.red[300],
-                      fontSize: 14,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            // Sinyal göstergesi
-            if (device != null)
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.blue.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  '${device.rssi} dBm',
-                  style: const TextStyle(
-                    color: Colors.blue,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-          ],
-        ),
-      );
-    });
-  }
-
-  Widget buildDeviceInfo() {
-    return Obx(() {
-      return Container(
-        margin: EdgeInsets.all(16),
-        padding: EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          border: Border.all(
-            color: controller.isListeningSensor.value
+            color: isCalibrating
                 ? Colors.yellow
-                : Colors.grey,
+                : (controller.isConnected ? Colors.green : Colors.grey),
             width: 2,
           ),
           borderRadius: BorderRadius.circular(12),
@@ -171,47 +90,48 @@ class SensorDataScreen extends StatelessWidget {
               height: 48,
               width: 48,
               decoration: BoxDecoration(
-                color: Colors.yellow.withValues(alpha: 0.2),
+                color: (isCalibrating ? Colors.yellow : Colors.green)
+                    .withOpacity(0.2),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(Icons.bluetooth_connected, color: Colors.yellow),
+              child: Icon(
+                isCalibrating
+                    ? Icons.published_with_changes
+                    : Icons.bluetooth_connected,
+                color: isCalibrating ? Colors.yellow : Colors.green,
+              ),
             ),
-            SizedBox(width: 15),
-
+            const SizedBox(width: 15),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (controller.connectedDevice.value != null)
                   Text(
                     controller.connectedDevice.value!.name,
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
                       fontSize: 15,
                     ),
                   ),
-                SizedBox(height: 5),
-                if (controller.connectedDevice.value != null)
-                  Text("Bağlı", style: TextStyle(color: Colors.yellow)),
+                const SizedBox(height: 5),
+                Text(
+                  isCalibrating ? "Kalibre Ediliyor..." : "Bağlı",
+                  style: TextStyle(
+                    color: isCalibrating ? Colors.yellow : Colors.green,
+                  ),
+                ),
               ],
             ),
-            SizedBox(width: 30),
-            Container(
-              height: 30,
-              width: 75,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: Colors.blue.withValues(alpha: 0.4),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
+            const Spacer(),
+            if (controller.connectedDevice.value != null)
+              Text(
                 "${controller.connectedDevice.value!.rssi} dBm",
-                style: TextStyle(
+                style: const TextStyle(
                   color: Colors.blue,
                   fontWeight: FontWeight.bold,
                 ),
               ),
-            ),
           ],
         ),
       );
@@ -222,24 +142,30 @@ class SensorDataScreen extends StatelessWidget {
     return Obx(() {
       final data = controller.sensorData.value;
       final isListening = controller.isListeningSensor.value;
-      final error = controller.errorMessage.value;
+      final isCalibrating = controller.isCalibrating.value;
 
-      // Error durumu
-      if (controller.hasError && error != null) {
-        return _buildErrorState(error);
+      if (controller.hasError) {
+        return _buildErrorState(controller.errorMessage.value ?? "Hata");
       }
 
-      // Henüz dinleme başlamamış
+      if (isCalibrating) {
+        return _buildWaitingState(
+          "Sıfır Noktası Belirleniyor...",
+          "Cihazı düz bir zeminde sabit tutun.",
+        );
+      }
+
       if (!isListening && data == null) {
         return _buildIdleState();
       }
 
-      // Dinleniyor ama veri yok
       if (isListening && data == null) {
-        return _buildWaitingState();
+        return _buildWaitingState(
+          "Veri Bekleniyor...",
+          "Bluetooth üzerinden paketler aranıyor.",
+        );
       }
 
-      // Veri var
       return _buildDataDisplay(data!);
     });
   }
@@ -249,215 +175,136 @@ class SensorDataScreen extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Container(
-            width: 100,
-            height: 100,
-            decoration: BoxDecoration(
-              color: Colors.blue.withOpacity(0.1),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(Icons.sensors, size: 50, color: Colors.blue.shade300),
-          ),
+          Icon(Icons.sensors_off, size: 80, color: Colors.grey[700]),
           const SizedBox(height: 24),
           const Text(
-            'Sensör Verisi Bekleniyor',
+            'Sensör Uyku Modunda',
             style: TextStyle(
               color: Colors.white,
-              fontSize: 20,
+              fontSize: 18,
               fontWeight: FontWeight.bold,
             ),
           ),
           const SizedBox(height: 8),
-          Text(
-            'Veri almaya başlamak için\naşağıdaki butona basın',
+          const Text(
+            'Önce kalibrasyon yapmanız\nve ardından başlatmanız önerilir.',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey[400], fontSize: 14),
+            style: TextStyle(color: Colors.grey, fontSize: 14),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildWaitingState() {
+  Widget _buildWaitingState(String title, String subtitle) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          SizedBox(
-            width: 80,
-            height: 80,
-            child: CircularProgressIndicator(
-              strokeWidth: 4,
-              valueColor: AlwaysStoppedAnimation(Colors.blue.shade400),
-            ),
-          ),
+          const CircularProgressIndicator(color: Colors.yellow),
           const SizedBox(height: 24),
-          const Text(
-            'Veri Bekleniyor...',
-            style: TextStyle(
+          Text(
+            title,
+            style: const TextStyle(
               color: Colors.white,
-              fontSize: 20,
+              fontSize: 18,
               fontWeight: FontWeight.bold,
             ),
           ),
           const SizedBox(height: 8),
           Text(
-            'Sensörden veri alınıyor',
-            style: TextStyle(color: Colors.grey[400], fontSize: 14),
+            subtitle,
+            style: const TextStyle(color: Colors.grey, fontSize: 14),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildDataDisplay(String data) {
-    // Veriyi parse et (örn: "X:123,Y:456,Z:789")
-    final parts = data.split(',');
-
+  Widget _buildDataDisplay(BleSampleEntity data) {
     return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        children: [
-          // Ana Veri Kartı
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Colors.blue.shade700, Colors.purple.shade700],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.blue.withOpacity(0.3),
-                  blurRadius: 20,
-                  offset: const Offset(0, 10),
-                ),
-              ],
-            ),
-            child: Column(
-              children: [
-                const Text(
-                  'RAW DATA',
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 2,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  data,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    fontFamily: 'monospace',
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 24),
-
-          // Ayrıştırılmış Veriler
-          if (parts.length > 1)
-            Expanded(
-              child: GridView.builder(
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                  childAspectRatio: 1.5,
-                ),
-                itemCount: parts.length,
-                itemBuilder: (context, index) {
-                  return _buildDataCard(parts[index], index);
-                },
-              ),
-            )
-          else
-            Expanded(child: Center(child: _buildLargeDataCard(data))),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDataCard(String value, int index) {
-    final colors = [
-      Colors.blue,
-      Colors.green,
-      Colors.orange,
-      Colors.purple,
-      Colors.red,
-      Colors.teal,
-    ];
-    final color = colors[index % colors.length];
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.grey[850],
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
+      padding: const EdgeInsets.all(24),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(
-            'VALUE ${index + 1}',
+          const Text(
+            "MERKEZE GÖRE KONUM",
             style: TextStyle(
-              color: color.shade300,
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1,
+              color: Colors.grey,
+              letterSpacing: 2,
+              fontSize: 12,
             ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            value.trim(),
-            style: TextStyle(
-              color: color,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              fontFamily: 'monospace',
+          const SizedBox(height: 32),
+          Row(
+            children: [
+              _buildCoordinateCard("X EKSENİ", data.x, Colors.blue),
+              const SizedBox(width: 16),
+              _buildCoordinateCard("Y EKSENİ", data.y, Colors.purple),
+            ],
+          ),
+          const SizedBox(height: 40),
+          // Görsel bir gösterge (Opsiyonel)
+          Container(
+            height: 100,
+            width: 100,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white24),
             ),
-            textAlign: TextAlign.center,
+            child: Center(
+              child: Transform.translate(
+                offset: Offset(
+                  data.x * 2,
+                  data.y * 2,
+                ), // Veriye göre hareket eden nokta
+                child: Container(
+                  width: 12,
+                  height: 12,
+                  decoration: const BoxDecoration(
+                    color: Colors.yellow,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildLargeDataCard(String data) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(32),
-      decoration: BoxDecoration(
-        color: Colors.grey[850],
-        borderRadius: BorderRadius.circular(24),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.data_usage, size: 48, color: Colors.blue.shade300),
-          const SizedBox(height: 16),
-          Text(
-            data,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 32,
-              fontWeight: FontWeight.bold,
-              fontFamily: 'monospace',
+  Widget _buildCoordinateCard(String label, double value, Color color) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 24),
+        decoration: BoxDecoration(
+          color: Colors.grey[850],
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: color.withOpacity(0.3)),
+        ),
+        child: Column(
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+              ),
             ),
-            textAlign: TextAlign.center,
-          ),
-        ],
+            const SizedBox(height: 12),
+            Text(
+              value.toStringAsFixed(2),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 32,
+                fontWeight: FontWeight.bold,
+                fontFamily: 'monospace',
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -467,43 +314,12 @@ class SensorDataScreen extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Container(
-            width: 100,
-            height: 100,
-            decoration: BoxDecoration(
-              color: Colors.red.withOpacity(0.1),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.error_outline, size: 50, color: Colors.red),
-          ),
-          const SizedBox(height: 24),
-          const Text(
-            'Hata Oluştu',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Text(
-              error,
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.red[300], fontSize: 14),
-            ),
-          ),
-          const SizedBox(height: 24),
-          ElevatedButton.icon(
+          const Icon(Icons.error_outline, size: 60, color: Colors.red),
+          const SizedBox(height: 16),
+          Text(error, style: const TextStyle(color: Colors.red)),
+          TextButton(
             onPressed: controller.retryConnection,
-            icon: const Icon(Icons.refresh),
-            label: const Text('Tekrar Dene'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            ),
+            child: const Text("Tekrar Dene"),
           ),
         ],
       ),
@@ -513,54 +329,71 @@ class SensorDataScreen extends StatelessWidget {
   Widget _buildControlButtons() {
     return Obx(() {
       final isListening = controller.isListeningSensor.value;
+      final isCalibrating = controller.isCalibrating.value;
       final isConnected = controller.isConnected;
 
       return Container(
-        padding: const EdgeInsets.all(16),
-        child: Row(
+        padding: const EdgeInsets.all(20),
+        child: Column(
           children: [
-            // Start/Stop Butonu
-            Expanded(
-              flex: 2,
-              child: ElevatedButton.icon(
-                onPressed: isConnected
-                    ? controller.toggleSensorListening
-                    : null,
-                icon: Icon(isListening ? Icons.stop : Icons.play_arrow),
-                label: Text(isListening ? 'Durdur' : 'Başlat'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: isListening ? Colors.red : Colors.green,
-                  foregroundColor: Colors.white,
-                  disabledBackgroundColor: Colors.grey[700],
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+            Row(
+              children: [
+                // KALİBRASYON BUTONU
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: isConnected && !isListening && !isCalibrating
+                        ? controller.calibrate
+                        : null,
+                    icon: const Icon(Icons.compass_calibration),
+                    label: const Text('Kalibre Et'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.yellow[700],
+                      foregroundColor: Colors.black,
+                      disabledBackgroundColor: Colors.grey[800],
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
                   ),
                 ),
-              ),
+                const SizedBox(width: 12),
+                // BAŞLAT/DURDUR BUTONU
+                Expanded(
+                  flex: 2,
+                  child: ElevatedButton.icon(
+                    onPressed: isConnected && !isCalibrating
+                        ? controller.toggleSensorListening
+                        : null,
+                    icon: Icon(isListening ? Icons.pause : Icons.play_arrow),
+                    label: Text(isListening ? 'Durdur' : 'Başlat'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: isListening ? Colors.red : Colors.green,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
-
-            const SizedBox(width: 12),
-
-            // Disconnect Butonu
-            Expanded(
-              child: ElevatedButton.icon(
+            const SizedBox(height: 12),
+            // KES BUTONU
+            SizedBox(
+              width: double.infinity,
+              child: TextButton.icon(
                 onPressed: isConnected
                     ? () async {
                         await controller.disconnect();
                         Get.back();
                       }
                     : null,
-                icon: const Icon(Icons.bluetooth_disabled),
-                label: const Text('Kes'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.grey[800],
-                  foregroundColor: Colors.white,
-                  disabledBackgroundColor: Colors.grey[700],
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                icon: const Icon(Icons.bluetooth_disabled, color: Colors.grey),
+                label: const Text(
+                  'Bağlantıyı Kes',
+                  style: TextStyle(color: Colors.grey),
                 ),
               ),
             ),

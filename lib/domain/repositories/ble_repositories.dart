@@ -1,4 +1,5 @@
 import 'package:dinogame/domain/entites/ble_device_entity.dart';
+import 'package:dinogame/domain/entites/ble_sample_entity.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 abstract class BleRepositories {
@@ -21,8 +22,15 @@ abstract class BleRepositories {
     required String characteristicUuid,
   });
   Future<void> unsubscribeFromSensorData();
-  Stream<String> get sensorDataStream;
+
+  Stream<BleSampleEntity> get sensorDataStream;
 
   // Cleanup
   void disposeElements();
+
+  //Start calibration
+  Future<void> startCalibration({
+    required String serviceUuid,
+    required String characteristicUuid,
+  });
 }
