@@ -16,7 +16,6 @@ import '../../data/data_sources/ble_data_source.dart' as _i790;
 import '../../data/repositories/ble_repositories_impl.dart' as _i217;
 import '../../domain/repositories/ble_repositories.dart' as _i383;
 import '../../presentation/bluetooth/bluetooth_controller.dart' as _i991;
-import '../../presentation/bluetooth/deneme_controller.dart' as _i950;
 import '../ble/ble_service.dart' as _i227;
 import 'ble_module.dart' as _i178;
 
@@ -37,9 +36,6 @@ extension GetItInjectableX on _i174.GetIt {
     );
     gh.factory<_i991.BluetoothController>(
       () => _i991.BluetoothController(gh<_i383.BleRepositories>()),
-    );
-    gh.factory<_i950.DenemeController>(
-      () => _i950.DenemeController(gh<_i383.BleRepositories>()),
     );
     return this;
   }

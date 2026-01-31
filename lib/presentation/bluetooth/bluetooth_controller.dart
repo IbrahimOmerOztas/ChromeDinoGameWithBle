@@ -1,10 +1,11 @@
 import 'dart:async';
 
+import 'package:dinogame/core/errors/exception.dart';
 import 'package:dinogame/domain/entites/ble_device_entity.dart';
 import 'package:dinogame/domain/repositories/ble_repositories.dart';
 import 'package:dinogame/presentation/bluetooth/ble_state.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:get/state_manager.dart';
+import 'package:get/get.dart';
 import 'package:injectable/injectable.dart';
 
 @injectable
@@ -31,30 +32,37 @@ class BluetoothController extends GetxController {
   /// Hata mesajı
   final errorMessage = Rxn<String>();
 
+  /// Sensör verisi
+  final sensorData = Rxn<String>();
+
+  /// Sensör verisini dinliyor mu
+  final isListeningSensor = false.obs;
+
+  // ============== Nordic UART UUIDs ==============
+
+  /// Nordic UART Service (NUS) ana servis UUID'si
+  static const String serviceUuid = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
+
+  /// Veri okuma (Notify) için kullanılan TX Karakteristik UUID'si
+  static const String charUuid = "6e400003-b5a3-f393-e0a9-e50e24dcca9e";
+
   // ============== Internal Subscriptions ==============
 
   StreamSubscription<List<BleDeviceEntity>>? _scanSub;
   StreamSubscription<BluetoothConnectionState>? _connSub;
+  StreamSubscription<String>? _sensorSub;
 
   // ============== Computed Getters ==============
 
-  /// Tarama devam ediyor mu?
   bool get isScanning => bleState.value == BleState.scanning;
-
-  /// Cihaza bağlı mı?
   bool get isConnected => bleState.value == BleState.connected;
-
-  /// Bağlanma işlemi devam ediyor mu?
   bool get isConnecting => bleState.value == BleState.connecting;
-
-  /// Hata var mı?
   bool get hasError => bleState.value == BleState.error;
 
   BluetoothController(this._bleRepositories);
 
   // ============== Scan Methods ==============
 
-  /// Taramayı başlat/durdur toggle
   Future<void> toggleScan() async {
     if (isScanning) {
       await stopScan();
@@ -63,7 +71,6 @@ class BluetoothController extends GetxController {
     }
   }
 
-  /// Cihaz taramasını başlat
   Future<void> startScan() async {
     try {
       _clearError();
@@ -80,54 +87,59 @@ class BluetoothController extends GetxController {
           _setError("Tarama sırasında hata: $error");
         },
       );
+    } on BleException catch (e) {
+      _setError(e.message);
     } catch (e) {
       _setError("Tarama başlatılamadı: $e");
     }
   }
 
-  /// Cihaz taramasını durdur
   Future<void> stopScan() async {
-    await _bleRepositories.stopScan();
-    _scanSub?.cancel();
-    _scanSub = null;
+    try {
+      await _bleRepositories.stopScan();
+      _scanSub?.cancel();
+      _scanSub = null;
 
-    if (bleState.value == BleState.scanning) {
-      bleState.value = BleState.idle;
+      if (bleState.value == BleState.scanning) {
+        bleState.value = BleState.idle;
+      }
+    } on BleException catch (e) {
+      _setError(e.message);
+    } catch (e) {
+      _setError("Tarama durdurulamadı: $e");
     }
   }
 
   // ============== Connection Methods ==============
 
-  /// Seçilen cihaza bağlan
   Future<void> connect(BleDeviceEntity entity) async {
     try {
       _clearError();
       bleState.value = BleState.connecting;
 
-      // Taramayı durdur
       await stopScan();
-
-      // Bağlantı state'ini dinlemeye başla
       _listenConnectionState();
 
-      // Cihaza bağlan
       await _bleRepositories.connect(entity.id);
 
-      // Başarılı bağlantı
       connectedDevice.value = entity;
       bleState.value = BleState.connected;
 
-      // Servisleri keşfet
-      await _discoverServices();
+      //await _discoverServices();
+    } on BleException catch (e) {
+      connectedDevice.value = null;
+      _setError(e.message);
     } catch (e) {
       connectedDevice.value = null;
       _setError("Bağlantı kurulamadı: $e");
     }
   }
 
-  /// Bağlantıyı kes
   Future<void> disconnect() async {
     try {
+      // Önce sensör dinlemeyi durdur
+      await stopListeningSensorData();
+
       await _bleRepositories.disconnect();
       _connSub?.cancel();
       _connSub = null;
@@ -135,12 +147,13 @@ class BluetoothController extends GetxController {
       connectedDevice.value = null;
       deviceServices.clear();
       bleState.value = BleState.idle;
+    } on BleException catch (e) {
+      _setError(e.message);
     } catch (e) {
       _setError("Bağlantı kesilemedi: $e");
     }
   }
 
-  /// Bağlantıyı yeniden dene
   Future<void> retryConnection() async {
     final device = connectedDevice.value;
     if (device != null) {
@@ -148,6 +161,68 @@ class BluetoothController extends GetxController {
     } else {
       _clearError();
       bleState.value = BleState.idle;
+    }
+  }
+
+  // ============== Sensor Data Methods ==============
+
+  /// Sensör verisini dinlemeye başla
+  Future<void> startListeningSensorData() async {
+    try {
+      if (!isConnected) {
+        _setError("Önce bir cihaza bağlanmalısınız");
+        return;
+      }
+
+      _clearError();
+      isListeningSensor.value = true;
+
+      await _bleRepositories.subscribeToSensorData(
+        serviceUuid: serviceUuid,
+        characteristicUuid: charUuid,
+      );
+
+      _sensorSub?.cancel();
+      _sensorSub = _bleRepositories.sensorDataStream.listen(
+        (data) {
+          sensorData.value = data;
+        },
+        onError: (error) {
+          _setError("Sensör verisi hatası: $error");
+        },
+      );
+    } on BleException catch (e) {
+      isListeningSensor.value = false;
+      _setError(e.message);
+    } catch (e) {
+      isListeningSensor.value = false;
+      _setError("Sensör verisi alınamadı: $e");
+    }
+  }
+
+  /// Sensör verisini dinlemeyi durdur
+  Future<void> stopListeningSensorData() async {
+    try {
+      _sensorSub?.cancel();
+      _sensorSub = null;
+      sensorData.value = null;
+      isListeningSensor.value = false;
+
+      await _bleRepositories.unsubscribeFromSensorData();
+    } on BleException catch (e) {
+      _setError(e.message);
+    } catch (e) {
+      // Hata olsa bile state'i sıfırla
+      isListeningSensor.value = false;
+    }
+  }
+
+  /// Sensör verisini toggle et
+  Future<void> toggleSensorListening() async {
+    if (isListeningSensor.value) {
+      await stopListeningSensorData();
+    } else {
+      await startListeningSensorData();
     }
   }
 
@@ -160,24 +235,24 @@ class BluetoothController extends GetxController {
       connectionState.value = state;
 
       if (state == BluetoothConnectionState.disconnected) {
-        // Beklenmedik bağlantı kopması
         if (bleState.value == BleState.connected) {
           connectedDevice.value = null;
+          isListeningSensor.value = false;
+          sensorData.value = null;
           bleState.value = BleState.idle;
         }
       }
     });
   }
 
-  Future<void> _discoverServices() async {
+  /*Future<void> _discoverServices() async {
     try {
       final services = _bleRepositories.discoverServices;
       deviceServices.assignAll(services);
     } catch (e) {
-      // Service keşfi başarısız olsa bile bağlantı devam edebilir
       deviceServices.clear();
     }
-  }
+  }*/
 
   void _setError(String message) {
     errorMessage.value = message;
@@ -194,6 +269,7 @@ class BluetoothController extends GetxController {
   void onClose() {
     _scanSub?.cancel();
     _connSub?.cancel();
+    _sensorSub?.cancel();
     _bleRepositories.disconnect();
     super.onClose();
   }

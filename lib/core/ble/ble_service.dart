@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:dinogame/core/errors/exception.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
@@ -22,14 +23,20 @@ class BleService {
   Stream<BluetoothConnectionState> get connectionStateStream =>
       _connectionStateController.stream;
 
+  final StreamController<String> _charDataController =
+      StreamController.broadcast();
+  Stream<String> get charDataStream => _charDataController.stream;
+
   //internals
   BluetoothDevice? connectedDevice;
   List<BluetoothService>? services;
   BluetoothAdapterState? adapterState;
+  BluetoothCharacteristic? notifyChar;
 
   StreamSubscription<BluetoothAdapterState>? adapterSub;
   StreamSubscription<BluetoothConnectionState>? connSub;
   StreamSubscription<List<ScanResult>>? scanSub;
+  StreamSubscription<List<int>>? charSub;
 
   List<BluetoothService>? get currentServices => services;
 
@@ -87,6 +94,8 @@ class BleService {
       );
 
       connectedDevice = device;
+
+      await discoverService();
     } catch (e) {
       throw BleException("Bağlanti sırasinda hata oluştu => $e");
     }
@@ -115,24 +124,91 @@ class BleService {
 
   Future<void> discoverService() async {
     try {
-      final listedServices = await connectedDevice?.discoverServices();
-      if (listedServices != null) {
-        services = listedServices;
-      } else {
-        throw BleException("Connected Device için serviceler getirelmedi.");
+      if (connectedDevice == null) {
+        throw BleException("cihaz bağlantısı bulunamadi.");
       }
+      final servs = await connectedDevice?.discoverServices();
+      if (servs == null) {
+        throw BleException("servis bulunamadi");
+      }
+
+      services = servs;
     } catch (e) {
       throw BleException("Serviceler keşfedilirken bir hata oluştu => $e");
     }
   }
 
+  //----------------subscribe characteristic------------
+
+  Future<void> subscribeToCharacteristic({
+    required String serviceUuid,
+    required String characteristicUuid,
+  }) async {
+    try {
+      if (services == null || services!.isEmpty) {
+        throw BleException("Önce servicelerin alınması gerekiyor.");
+      }
+
+      final service = services!.firstWhere(
+        (s) => s.uuid == Guid(serviceUuid),
+        orElse: () =>
+            throw BleException("İlgili service bulunamadı: $serviceUuid"),
+      );
+
+      final charr = service.characteristics.firstWhere(
+        (c) => c.uuid == Guid(characteristicUuid),
+        orElse: () => throw BleException(
+          "İlgili characteristic bulunamadı: $characteristicUuid",
+        ),
+      );
+
+      await charr.setNotifyValue(true);
+
+      charSub?.cancel();
+      charSub = charr.onValueReceived.listen(
+        (data) {
+          try {
+            const asciiDecoder = AsciiDecoder();
+            final value = asciiDecoder.convert(data);
+            _charDataController.add(value);
+          } catch (e) {
+            _charDataController.addError("Veri çözümlenemedi: $e");
+          }
+        },
+        onError: (error) {
+          _charDataController.addError("Veri alınırken hata: $error");
+        },
+      );
+    } catch (e) {
+      throw BleException("Characteristic subscribe hatası: $e");
+    }
+  }
+
+  /// Characteristic subscription'ı durdur
+  Future<void> unsubscribeFromCharacteristic() async {
+    try {
+      charSub?.cancel();
+      charSub = null;
+      if (notifyChar != null) {
+        await notifyChar!.setNotifyValue(false);
+        notifyChar = null;
+      }
+    } catch (e) {
+      throw BleException("Unsubscribe hatası: $e");
+    }
+  }
+
+  //--------------------Calibration----------------
+
   Future<void> disposeElements() async {
     connSub?.cancel();
     adapterSub?.cancel();
     scanSub?.cancel();
+    charSub?.cancel();
 
     _connectionStateController.close();
     _adapterStateController.close();
     _scanResultController.close();
+    _charDataController.close();
   }
 }

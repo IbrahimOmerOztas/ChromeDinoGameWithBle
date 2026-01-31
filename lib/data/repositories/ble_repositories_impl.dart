@@ -1,3 +1,4 @@
+import 'package:dinogame/core/errors/exception.dart';
 import 'package:dinogame/data/data_sources/ble_data_source.dart';
 import 'package:dinogame/data/models/ble_device_model.dart';
 import 'package:dinogame/domain/entites/ble_device_entity.dart';
@@ -10,42 +11,17 @@ class BleRepositoriesImpl implements BleRepositories {
   final BleDataSource _bleDataSource;
 
   BleRepositoriesImpl(this._bleDataSource);
-  @override
-  Future<void> connect(String id) async {
-    try {
-      final device = BluetoothDevice.fromId(id);
-      await _bleDataSource.connect(device);
-    } catch (e) {
-      rethrow;
-    }
-  }
 
-  @override
-  Stream<BluetoothConnectionState> get connectionState =>
-      _bleDataSource.connectionStateStream;
-  @override
-  Future<void> disconnect() async {
-    try {
-      await _bleDataSource.disconnect();
-    } catch (e) {
-      rethrow;
-    }
-  }
-
-  @override
-  List<BluetoothService> get discoverServices => _bleDataSource.services;
-
-  @override
-  void disposeElements() {
-    _bleDataSource.disposeElements();
-  }
+  // ============== Scan ==============
 
   @override
   Future<void> startScan() async {
     try {
       await _bleDataSource.startScan();
-    } catch (e) {
+    } on BleException {
       rethrow;
+    } catch (e) {
+      throw BleException("Repository tarama hatası: $e");
     }
   }
 
@@ -53,8 +29,10 @@ class BleRepositoriesImpl implements BleRepositories {
   Future<void> stopScan() async {
     try {
       await _bleDataSource.stopScan();
-    } catch (e) {
+    } on BleException {
       rethrow;
+    } catch (e) {
+      throw BleException("Repository tarama durdurma hatası: $e");
     }
   }
 
@@ -65,4 +43,78 @@ class BleRepositoriesImpl implements BleRepositories {
             .map((r) => BleDeviceModel.fromScanResult(r).toEntity())
             .toList(),
       );
+
+  // ============== Connection ==============
+
+  @override
+  Future<void> connect(String id) async {
+    try {
+      final device = BluetoothDevice.fromId(id);
+      await _bleDataSource.connect(device);
+    } on BleException {
+      rethrow;
+    } catch (e) {
+      throw BleException("Repository bağlantı hatası: $e");
+    }
+  }
+
+  @override
+  Future<void> disconnect() async {
+    try {
+      await _bleDataSource.disconnect();
+    } on BleException {
+      rethrow;
+    } catch (e) {
+      throw BleException("Repository disconnect hatası: $e");
+    }
+  }
+
+  @override
+  Stream<BluetoothConnectionState> get connectionState =>
+      _bleDataSource.connectionStateStream;
+
+  // ============== Services ==============
+
+  @override
+  List<BluetoothService> get discoverServices => _bleDataSource.services;
+
+  // ============== Sensor Data ==============
+
+  @override
+  Future<void> subscribeToSensorData({
+    required String serviceUuid,
+    required String characteristicUuid,
+  }) async {
+    try {
+      await _bleDataSource.subscribeToCharacteristic(
+        serviceUuid: serviceUuid,
+        characteristicUuid: characteristicUuid,
+      );
+    } on BleException {
+      rethrow;
+    } catch (e) {
+      throw BleException("Repository subscribe hatası: $e");
+    }
+  }
+
+  @override
+  Future<void> unsubscribeFromSensorData() async {
+    try {
+      await _bleDataSource.unsubscribeFromCharacteristic();
+    } on BleException {
+      rethrow;
+    } catch (e) {
+      throw BleException("Repository unsubscribe hatası: $e");
+    }
+  }
+
+  @override
+  Stream<String> get sensorDataStream => _bleDataSource.sensorDataStream;
+
+  // ============== Cleanup ==============
+
+  @override
+  void disposeElements() {
+    _bleDataSource.disposeElements();
+  }
 }

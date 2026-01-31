@@ -2,6 +2,7 @@ import 'package:dinogame/presentation/bluetooth/ble_state.dart';
 import 'package:dinogame/presentation/bluetooth/bluetooth_controller.dart';
 import 'package:dinogame/presentation/bluetooth/widgets/device_card.dart';
 import 'package:dinogame/presentation/bluetooth/widgets/scanning_button.dart';
+import 'package:dinogame/presentation/routing/app_routes.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -36,21 +37,27 @@ class BluetoothScreen extends StatelessWidget {
       backgroundColor: Colors.transparent,
       title: const Text(
         'Bluetooth Cihazları',
-        style: TextStyle(
-          color: Colors.black87,
-          fontWeight: FontWeight.bold,
-        ),
+        style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold),
       ),
       centerTitle: true,
       actions: [
+        // Sensör Verileri Butonu
+        Obx(() {
+          if (controller.isConnected) {
+            return IconButton(
+              onPressed: () => Get.toNamed(AppRoutes.sensorData),
+              icon: const Icon(Icons.sensors, color: Colors.blue),
+              tooltip: 'Sensör Verileri',
+            );
+          }
+          return const SizedBox.shrink();
+        }),
+        // Disconnect Butonu
         Obx(() {
           if (controller.isConnected) {
             return IconButton(
               onPressed: controller.disconnect,
-              icon: const Icon(
-                Icons.bluetooth_disabled,
-                color: Colors.red,
-              ),
+              icon: const Icon(Icons.bluetooth_disabled, color: Colors.red),
               tooltip: 'Bağlantıyı Kes',
             );
           }
@@ -70,9 +77,7 @@ class BluetoothScreen extends StatelessWidget {
       physics: const AlwaysScrollableScrollPhysics(),
       slivers: [
         // Status Header
-        SliverToBoxAdapter(
-          child: _buildStatusHeader(state),
-        ),
+        SliverToBoxAdapter(child: _buildStatusHeader(state)),
 
         // Bağlı Cihaz
         if (connectedDevice != null)
@@ -106,9 +111,7 @@ class BluetoothScreen extends StatelessWidget {
 
         // Error State
         if (state == BleState.error)
-          SliverToBoxAdapter(
-            child: _buildErrorWidget(),
-          ),
+          SliverToBoxAdapter(child: _buildErrorWidget()),
 
         // Diğer Cihazlar Başlık
         if (controller.devices.isNotEmpty && state != BleState.error)
@@ -131,9 +134,7 @@ class BluetoothScreen extends StatelessWidget {
         if (state == BleState.error)
           const SliverToBoxAdapter(child: SizedBox.shrink())
         else if (controller.devices.isEmpty && state != BleState.scanning)
-          SliverFillRemaining(
-            child: _buildEmptyState(),
-          )
+          SliverFillRemaining(child: _buildEmptyState())
         else
           _buildDeviceList(),
       ],
@@ -312,10 +313,7 @@ class BluetoothScreen extends StatelessWidget {
           Text(
             'Yakındaki Bluetooth cihazlarını\nbulmak için tarama başlatın',
             textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey[600],
-            ),
+            style: TextStyle(fontSize: 14, color: Colors.grey[600]),
           ),
           const SizedBox(height: 80), // FAB için boşluk
         ],
@@ -356,25 +354,24 @@ class BluetoothScreen extends StatelessWidget {
     final connectedDeviceId = controller.connectedDevice.value?.id;
 
     // Bağlı cihazı listeden çıkar
-    final otherDevices =
-        devices.where((d) => d.id != connectedDeviceId).toList();
+    final otherDevices = devices
+        .where((d) => d.id != connectedDeviceId)
+        .toList();
 
     return SliverList(
-      delegate: SliverChildBuilderDelegate(
-        (context, index) {
-          final device = otherDevices[index];
-          final isConnecting = controller.isConnecting &&
-              controller.connectedDevice.value?.id == device.id;
+      delegate: SliverChildBuilderDelegate((context, index) {
+        final device = otherDevices[index];
+        final isConnecting =
+            controller.isConnecting &&
+            controller.connectedDevice.value?.id == device.id;
 
-          return DeviceCard(
-            device: device,
-            isConnecting: isConnecting,
-            isConnected: false,
-            onConnect: () => controller.connect(device),
-          );
-        },
-        childCount: otherDevices.length,
-      ),
+        return DeviceCard(
+          device: device,
+          isConnecting: isConnecting,
+          isConnected: false,
+          onConnect: () => controller.connect(device),
+        );
+      }, childCount: otherDevices.length),
     );
   }
 }
