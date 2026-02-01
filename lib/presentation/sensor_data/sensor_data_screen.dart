@@ -1,15 +1,326 @@
+import 'dart:async';
+
 import 'package:dinogame/domain/entites/ble_sample_entity.dart';
 import 'package:dinogame/presentation/bluetooth/bluetooth_controller.dart';
+import 'package:dinogame/presentation/game/obstacle_game.dart';
+import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
-class SensorDataScreen extends StatelessWidget {
-  SensorDataScreen({super.key});
+class SensorDataScreen extends StatefulWidget {
+  const SensorDataScreen({super.key});
 
+  @override
+  State<SensorDataScreen> createState() => _SensorDataScreenState();
+}
+
+class _SensorDataScreenState extends State<SensorDataScreen> {
   final BluetoothController controller = Get.find<BluetoothController>();
+
+  // Oyun durumu
+  bool isGameMode = false;
+  bool isGameOver = false;
+  int currentScore = 0;
+
+  ObstacleGame? _game;
+  StreamSubscription? _sensorSubscription;
+
+  @override
+  void dispose() {
+    _sensorSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _showCalibrationDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.grey[850],
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.compass_calibration, color: Colors.yellow, size: 28),
+            SizedBox(width: 12),
+            Text(
+              'Kalibrasyon Gerekli',
+              style: TextStyle(color: Colors.white, fontSize: 18),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Oyuna başlamadan önce cihazı kalibre etmeniz gerekmektedir.',
+              style: TextStyle(color: Colors.grey, fontSize: 14),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.yellow.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.yellow.withOpacity(0.3)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.yellow, size: 20),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Cihazı düz bir zeminde sabit tutun ve Kalibre Et butonuna basın.',
+                      style: TextStyle(color: Colors.yellow, fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('İptal', style: TextStyle(color: Colors.grey)),
+          ),
+          Obx(() {
+            final isCalibrating = controller.isCalibrating.value;
+            return ElevatedButton(
+              onPressed: isCalibrating
+                  ? null
+                  : () async {
+                      await controller.calibrate();
+                      if (!controller.hasError && mounted) {
+                        Navigator.pop(context);
+                        _startGame();
+                      }
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.yellow[700],
+                foregroundColor: Colors.black,
+              ),
+              child: isCalibrating
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation(Colors.black),
+                      ),
+                    )
+                  : const Text('Kalibre Et'),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  void _startGame() {
+    setState(() {
+      isGameMode = true;
+      isGameOver = false;
+      currentScore = 0;
+    });
+
+    _game = ObstacleGame(
+      onGameOver: () {
+        setState(() {
+          isGameOver = true;
+        });
+      },
+      onScoreUpdate: (score) {
+        setState(() {
+          currentScore = score;
+        });
+      },
+    );
+
+    // Sensör verilerini dinle ve oyuna ilet
+    controller.startListeningSensorData();
+    _sensorSubscription = controller.sensorData.listen((data) {
+      if (data != null && _game != null) {
+        _game!.updatePlayerPosition(data.y);
+      }
+    });
+  }
+
+  void _exitGame() {
+    _sensorSubscription?.cancel();
+    controller.stopListeningSensorData();
+    setState(() {
+      isGameMode = false;
+      isGameOver = false;
+      currentScore = 0;
+      _game = null;
+    });
+  }
+
+  void _restartGame() {
+    _game?.restart();
+    setState(() {
+      isGameOver = false;
+      currentScore = 0;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (isGameMode) {
+      return _buildGameScreen();
+    }
+    return _buildSensorScreen();
+  }
+
+  Widget _buildGameScreen() {
+    return Scaffold(
+      backgroundColor: const Color(0xFF1A1A2E),
+      body: SafeArea(
+        child: Stack(
+          children: [
+            // Oyun
+            if (_game != null)
+              GameWidget(game: _game!),
+
+            // Üst bilgi çubuğu
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withOpacity(0.7),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // Geri butonu
+                    IconButton(
+                      onPressed: _exitGame,
+                      icon: const Icon(Icons.close, color: Colors.white),
+                    ),
+                    // Skor
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.star, color: Colors.yellow, size: 20),
+                          const SizedBox(width: 8),
+                          Text(
+                            '$currentScore',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Pause butonu
+                    IconButton(
+                      onPressed: () {
+                        _game?.togglePause();
+                        setState(() {});
+                      },
+                      icon: Icon(
+                        _game?.isPaused == true ? Icons.play_arrow : Icons.pause,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // Game Over ekranı
+            if (isGameOver)
+              Container(
+                color: Colors.black.withOpacity(0.8),
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.sentiment_dissatisfied,
+                        size: 80,
+                        color: Colors.red,
+                      ),
+                      const SizedBox(height: 24),
+                      const Text(
+                        'OYUN BİTTİ!',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 32,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Skor: $currentScore',
+                        style: const TextStyle(
+                          color: Colors.yellow,
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 32),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          ElevatedButton.icon(
+                            onPressed: _restartGame,
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('Tekrar Oyna'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 24,
+                                vertical: 12,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          ElevatedButton.icon(
+                            onPressed: _exitGame,
+                            icon: const Icon(Icons.exit_to_app),
+                            label: const Text('Çıkış'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.grey[700],
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 24,
+                                vertical: 12,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSensorScreen() {
     return Scaffold(
       backgroundColor: Colors.grey[900],
       appBar: _buildAppBar(),
@@ -336,6 +647,27 @@ class SensorDataScreen extends StatelessWidget {
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
+            // OYUN BAŞLAT BUTONU
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: isConnected && !isListening && !isCalibrating
+                    ? _showCalibrationDialog
+                    : null,
+                icon: const Icon(Icons.gamepad),
+                label: const Text('Oyunu Başlat'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.purple,
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor: Colors.grey[800],
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
             Row(
               children: [
                 // KALİBRASYON BUTONU

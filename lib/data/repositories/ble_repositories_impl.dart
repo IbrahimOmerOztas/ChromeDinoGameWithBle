@@ -21,7 +21,6 @@ class BleRepositoriesImpl implements BleRepositories {
   bool _isCalibrating = false;
   final List<BleSampleEntity> _calibrationBuffer = [];
   BleCalibrationEntity _currentCalibration = BleCalibrationEntity();
-  BleCalibrationEntity get currentCalibration => _currentCalibration;
 
   // ============== Scan ==============
 
@@ -186,4 +185,7 @@ class BleRepositoriesImpl implements BleRepositories {
       rethrow;
     }
   }
+
+  @override
+  BleCalibrationEntity get currentCalibration => _currentCalibration;
 }

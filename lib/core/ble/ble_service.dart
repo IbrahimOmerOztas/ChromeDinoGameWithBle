@@ -161,11 +161,16 @@ class BleService {
           "İlgili characteristic bulunamadı: $characteristicUuid",
         ),
       );
+      notifyChar = charr;
 
-      await charr.setNotifyValue(true);
+      if (notifyChar == null) {
+        throw BleException("characteristics yok");
+      }
+
+      await notifyChar!.setNotifyValue(true);
 
       charSub?.cancel();
-      charSub = charr.onValueReceived.listen(
+      charSub = notifyChar!.onValueReceived.listen(
         (data) {
           try {
             const asciiDecoder = AsciiDecoder();
@@ -199,7 +204,6 @@ class BleService {
   }
 
   //--------------------Calibration----------------
-  Future<void> getCalibrationValues() async {}
 
   Future<void> disposeElements() async {
     connSub?.cancel();

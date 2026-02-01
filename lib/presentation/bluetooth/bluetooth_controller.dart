@@ -283,10 +283,11 @@ class BluetoothController extends GetxController {
         serviceUuid: serviceUuid,
         characteristicUuid: charUuid,
       );
+      final orijin = _bleRepositories.currentCalibration;
 
       Get.snackbar(
         "Başarılı",
-        "Cihaz başarıyla kalibre edildi. Artık oyuna başlayabilirsiniz!",
+        "Cihaz başarıyla kalibre edildi. Artık oyuna başlayabilirsiniz! => x: ${_bleRepositories.currentCalibration.offsetX} ve y: ${_bleRepositories.currentCalibration.offsetY}",
         snackPosition: SnackPosition.BOTTOM,
       );
     } on BleException catch (e) {
